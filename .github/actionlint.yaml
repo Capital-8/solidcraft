@@ -2,3 +2,5 @@ self-hosted-runner:
   labels:
     - self-hosted-fast
     - self-hosted-light
+    # Blacksmith (Linux only; macOS and Windows stay on GitHub-hosted runners).
+    - blacksmith-4vcpu-ubuntu-2404
