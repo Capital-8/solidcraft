@@ -2601,7 +2601,7 @@ mod header_report_tests {
         h.step(&json!({"widget":"Download design"})).unwrap();
         let got = got.borrow();
         assert_eq!(got.len(), 1);
-        assert_eq!(got[0].0, "Plate.solidcraft");
+        assert_eq!(got[0].0, "Plate.sc");
         assert!(solidcraft_engine::io::is_design_container(&got[0].1));
         assert!(h.app.session.path.is_none(), "a download is no save: the design keeps no file");
     }
@@ -2620,11 +2620,7 @@ mod header_report_tests {
         h.step(&json!({"key":"S","cmd":true,"shift":true})).unwrap();
         h.frames(3);
         h.settle();
-        assert_eq!(
-            h.app.session.path.as_deref(),
-            h.dir.join("Copy.solidcraft").to_str(),
-            "Ctrl+Shift+S must open Save As, not save over the current file"
-        );
+        assert_eq!(h.app.session.path.as_deref(), h.dir.join("Copy.sc").to_str(), "Ctrl+Shift+S must open Save As, not save over the current file");
         assert_eq!(std::fs::read(&source).unwrap(), bytes, "Save As keeps the file the design came from");
         // The File menu shows the shortcut of the command it runs.
         let spec = solidcraft_engine::find_command("file.save_as").expect("file.save_as is a command");
