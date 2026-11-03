@@ -741,6 +741,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn layout_controls_keep_one_real_search_target_and_native_names() {
+        use egui::accesskit::Role;
+        for width in [600, 1600] {
+            let mut h = crate::scenario::Harness::new();
+            h.app.home.open = false;
+            h.call("ui.resize", serde_json::json!({"width":width,"height":1100}));
+            h.call("ui.prefs", serde_json::json!({"language":"en","open":"Layout"}));
+            for (query, native) in [
+                ("History", None),
+                ("Browser", None),
+                ("Components start open", Some((Role::CheckBox, "prefs:browser_components_open"))),
+                ("Menus", None),
+                ("Highlight active commands", Some((Role::CheckBox, "prefs:persistent_ribbon_pressed"))),
+                ("Show navigation bar", Some((Role::CheckBox, "prefs:navbar:show"))),
+                ("Position", None),
+            ] {
+                h.app.prefs_window.filter = query.into();
+                h.frames(5);
+                let (_, _, hits) = nav(&h.ctx);
+                let matching: Vec<_> = hits.iter().filter(|hit| hit.page == crate::prefs::PAGE_LAYOUT && hit.label == query).collect();
+                assert_eq!(matching.len(), 1, "{width}: {query} has one real Layout target");
+                if let Some((role, target)) = native {
+                    let tree = h.output.accesskit_update.as_ref().unwrap();
+                    let nodes: Vec<_> =
+                        tree.nodes.iter().filter(|(_, node)| node.role() == role && node.label() == Some(query) && !node.is_disabled()).collect();
+                    assert_eq!(nodes.len(), 1, "{query} retains its native accessible name");
+                    let bounds = nodes[0].1.bounds().unwrap();
+                    let centre = egui::pos2(((bounds.x0 + bounds.x1) / 2.0) as f32, ((bounds.y0 + bounds.y1) / 2.0) as f32);
+                    assert!(crate::scenario::rect_of(target).unwrap().contains(centre));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn appearance_controls_keep_one_search_result_and_their_page() {
         use egui::accesskit::Role;
         for width in [520, 1600] {
@@ -748,12 +783,12 @@ mod tests {
             h.app.home.open = false;
             h.call("ui.resize", serde_json::json!({"width":width,"height":1100}));
             h.call("ui.prefs", serde_json::json!({"language":"en","open":"Appearance"}));
-            for (query, label, native) in [
-                ("3D view colors", "3D view colors", None),
-                ("Interface scale", "Interface scale", Some((Role::Slider, "Interface scale", "prefs:scale"))),
-                ("Follow a theme file", "Follow a theme file", None),
-                ("Background", "Background", Some((Role::Button, "Color", "dialog:Background:Color"))),
-                ("Font", "Font", Some((Role::ComboBox, "Interface font", "prefs:ui_font"))),
+            for (query, label, row_target, native) in [
+                ("3D view colors", "3D view colors", "dialog:row:3D view colors", None),
+                ("Interface scale", "Interface scale", "dialog:row:Interface scale", Some((Role::Slider, "Interface scale", "prefs:scale"))),
+                ("Follow a theme file", "Follow a theme file", "prefs:theme_follow_toggle", None),
+                ("Background", "Background", "dialog:row:Background", Some((Role::Button, "Color", "dialog:Background:Color"))),
+                ("Font", "Font", "dialog:row:Font", Some((Role::ComboBox, "Interface font", "prefs:ui_font"))),
             ] {
                 h.app.prefs_window.filter = query.into();
                 h.frames(5);
@@ -761,9 +796,11 @@ mod tests {
                 let matching: Vec<_> = hits.iter().filter(|hit| hit.label == label).collect();
                 assert_eq!(matching.len(), 1, "width={width}: {query} needs exactly one real navigation hit");
                 assert_eq!(matching[0].page, crate::prefs::PAGE_APPEARANCE);
-                let at = h.widget(label).unwrap();
+                // The search field also contains the query as its accessible value. Use the
+                // indexed row so this check measures the result rather than the search field.
+                let row = crate::scenario::rect_of(row_target).unwrap();
                 let body = crate::scenario::rect_of("prefs:page_body").unwrap();
-                assert!(body.contains(egui::pos2(at[0] as f32, at[1] as f32)));
+                assert!(body.contains(row.center()), "width={width}: {query} row {row:?} outside {body:?}");
                 if let Some((role, name, target)) = native {
                     let tree = h.output.accesskit_update.as_ref().unwrap();
                     let controls: Vec<_> =
@@ -1103,10 +1140,10 @@ mod tests {
             ("status bar", "Status bar"),
             ("sketch tab shown", "Keep the Sketch tab shown"),
             ("search results", "Show search results in the ribbon"),
-            ("play history", "Play History button in the History controls"),
-            ("view's corner", "OK and Cancel in the view's corner"),
-            ("highlight active", "Highlight active ribbon commands"),
-            ("reveal on hover", "Reveal on hover"),
+            ("play history", "Play History button"),
+            ("view's corner", "Also in the view's corner"),
+            ("highlight active", "Highlight active commands"),
+            ("On hover", "On hover"),
         ];
         for (query, label) in rows {
             h.app.prefs_window.filter = query.into();
@@ -1120,7 +1157,7 @@ mod tests {
         h.app.prefs_window.filter = "sketch tab shown".into();
         h.frames(4);
         assert!(drawn(&h, "Keep the Sketch tab shown"));
-        assert!(!drawn(&h, "Highlight active ribbon commands"), "its neighbour is not a match");
+        assert!(!drawn(&h, "Highlight active commands"), "its neighbour is not a match");
         assert!(!drawn(&h, "Show search results in the ribbon"), "its neighbour is not a match");
         h.app.prefs_window.filter = "zzzz-no-setting".into();
         h.frames(4);
