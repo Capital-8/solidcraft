@@ -13,7 +13,6 @@ pub mod access;
 pub mod agent_chat;
 pub mod agent_cursor;
 pub mod ai_connect;
-pub mod bidi;
 pub mod blur;
 pub mod bom_panel;
 pub mod browser;
@@ -149,7 +148,7 @@ mod status_tests {
         assert_eq!(super::friendly_error("edit.undo", "nothing to undo"), "Undo: nothing to undo");
         {
             // The label follows the interface language; the engine's words stay English.
-            let _polish = crate::i18n::scope("pl");
+            let _polish = solidcraft_ui_text::scope("pl");
             assert_eq!(super::friendly_error("edit.undo", "nothing to undo"), "Cofnij: nothing to undo");
             assert_eq!(
                 super::friendly_error("sketch.dimension", "invalid parameters for `sketch.dimension`: value: `mm` is a unit name"),
@@ -842,6 +841,8 @@ impl SolveApp {
     }
 
     pub fn new(mut session: Session, services: Services) -> Self {
+        // The app's catalogs, once per process; later calls find them installed.
+        i18n::install();
         #[cfg(test)]
         let image_host = Some(solidcraft_engine::render::job::CpuHost::cooperative());
         #[cfg(not(test))]
@@ -1010,12 +1011,12 @@ impl SolveApp {
 
     /// Translate text using the active language preference.
     pub fn tr<'a>(&self, text: &'a str) -> &'a str {
-        i18n::Locale::for_language(&self.preferences.language).text(text)
+        solidcraft_ui_text::Locale::for_language(&self.preferences.language).text(text)
     }
 
     /// Translate a display label supplied by the engine, without changing its identifier.
     pub fn tr_label<'a>(&self, text: &'a str) -> &'a str {
-        i18n::Locale::for_language(&self.preferences.language).label(text)
+        solidcraft_ui_text::Locale::for_language(&self.preferences.language).label(text)
     }
 
     /// Draw the viewport on the GPU (eframe's wgpu render state, with the app's depth and
@@ -1450,7 +1451,7 @@ impl SolveApp {
                 "timeline.redefine" if v.get("rolled_back").and_then(Value::as_bool) == Some(true) => {
                     let feature = v.get("feature").and_then(Value::as_u64).and_then(|f| self.session.doc.feature(f));
                     let name = feature.map(|f| f.name.clone()).unwrap_or_default();
-                    self.set_status(i18n::format("timeline.edited_rolled_back", &[("name", &name)]), false);
+                    self.set_status(solidcraft_ui_text::format("timeline.edited_rolled_back", &[("name", &name)]), false);
                 }
                 _ => {}
             }
@@ -1621,7 +1622,7 @@ impl SolveApp {
                 // language scope, so resolve the echo from the saved preference instead of the
                 // thread-local scope. The command's own label is translated too, so the echo
                 // reads the same way the toolbar button it came from does.
-                let language = i18n::Locale::for_language(&self.preferences.language);
+                let language = solidcraft_ui_text::Locale::for_language(&self.preferences.language);
                 let label = language.label(command_label(id));
                 // Frames of a gesture (a continuous view move, a part dragged by its joints) are
                 // not echoed one by one.
@@ -1675,7 +1676,7 @@ impl SolveApp {
             Err(e) => {
                 // The native menu runs Undo and Redo before `logic` installs the frame scope, so
                 // the error would be translated with the thread default.
-                let _language = i18n::scope(&self.preferences.language);
+                let _language = solidcraft_ui_text::scope(&self.preferences.language);
                 let msg = friendly_error(id, e);
                 self.session.echo(msg.clone());
                 self.set_status(msg, true);
@@ -1763,7 +1764,7 @@ impl SolveApp {
     fn start_with_variant_memory(&mut self, id: &str, remember_variant: bool, opener: Option<egui::Rect>, section_edit: bool) {
         // A tool can be started outside the frame's scope (a direct `start`, a shortcut in
         // `logic`): build its hint in the user's language, not the thread default.
-        let _language = crate::i18n::scope(&self.preferences.language);
+        let _language = solidcraft_ui_text::scope(&self.preferences.language);
         if solidcraft_engine::panels::commands::is_command(id) {
             if let Err(why) = self.run(id, json!({})) {
                 self.set_status(why, true);
@@ -2460,7 +2461,7 @@ impl SolveApp {
     /// they wait for it.
     pub(crate) fn close_editor_for_history(&mut self) -> Result<(), String> {
         if self.pending_feature_edit.is_some() {
-            let why = i18n::tr("ui.history_waits_for_editor").to_string();
+            let why = solidcraft_ui_text::tr("ui.history_waits_for_editor").to_string();
             self.set_status(why.clone(), true);
             return Err(why);
         }
@@ -2749,14 +2750,14 @@ impl SolveApp {
     pub(crate) fn say_newer_file(&mut self) {
         let Some(file) = self.session.doc.newer_file.clone() else { return };
         for what in &file.not_understood {
-            let text = i18n::format("document.newer_file_not_read", &[("what", what)]);
+            let text = solidcraft_ui_text::format("document.newer_file_not_read", &[("what", what)]);
             self.messages.push(&text, false, now_ms());
         }
         let text = if file.format <= file.reads_up_to && !file.unknown_changes.is_empty() {
             let change = file.unknown_changes.first().map_or("", String::as_str);
-            i18n::format("document.newer_file_change", &[("format", &file.format.to_string()), ("change", change)])
+            solidcraft_ui_text::format("document.newer_file_change", &[("format", &file.format.to_string()), ("change", change)])
         } else {
-            i18n::format("document.newer_file", &[("format", &file.format.to_string()), ("reads", &file.reads_up_to.to_string())])
+            solidcraft_ui_text::format("document.newer_file", &[("format", &file.format.to_string()), ("reads", &file.reads_up_to.to_string())])
         };
         self.set_status(text, false);
     }
@@ -3234,7 +3235,7 @@ impl SolveApp {
         params_dialog::install_expressions(ctx);
         // Shortcuts run here, before `ui` installs the language scope: a tool started by its
         // key must build its translated hint in the user's language, not in English.
-        let _language = crate::i18n::scope(&self.preferences.language);
+        let _language = solidcraft_ui_text::scope(&self.preferences.language);
         panel_runtime::tick_app(self, ctx);
         // Sleep/wake often skips frames without a device-lost signal; refresh egui GPU textures
         // when the frame clock jumps so the chrome is not stuck blank (#8749).
@@ -3430,11 +3431,11 @@ impl SolveApp {
             self.applied_system_fonts = system_fonts;
             crate::fonts::setup_fonts_without_waiting(
                 ui.ctx(),
-                crate::i18n::effective_language(&self.preferences.language),
+                solidcraft_ui_text::effective_language(&self.preferences.language),
                 &self.preferences.ui_font,
             );
         }
-        let _language = crate::i18n::scope(&self.preferences.language);
+        let _language = solidcraft_ui_text::scope(&self.preferences.language);
         let mut report_input = None;
         issue_report::CadInput::block(self, ui, &mut report_input);
         semantic_content::begin(self, ui.ctx());
@@ -3885,10 +3886,10 @@ pub fn command_label(id: &str) -> &str {
 /// An engine error with the command's label instead of its id: "Shell: offset must be …".
 /// The command label and catalogued engine messages follow the interface language.
 pub fn friendly_error(id: &str, e: &str) -> String {
-    let label = i18n::tr_label(command_label(id));
+    let label = solidcraft_ui_text::tr_label(command_label(id));
     let msg = e.replace(&format!("invalid parameters for `{id}`: "), "").replace(&format!("{id}: "), "").replace(&format!("`{id}`"), label);
     let msg = i18n::tr_engine_error(&msg);
-    let msg = i18n::tr_label(&msg);
+    let msg = solidcraft_ui_text::tr_label(&msg);
     if msg.starts_with(label) { msg.to_string() } else { format!("{label}: {msg}") }
 }
 
